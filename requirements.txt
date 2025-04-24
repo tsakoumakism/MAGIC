@@ -1,5 +1,5 @@
 altair==5.5.0
-anaconda-anon-usage @ file:///C:/b/abs_c3w_h1zzjg/croot/anaconda-anon-usage_1710965204622/work
+#anaconda-anon-usage @ file:///C:/b/abs_c3w_h1zzjg/croot/anaconda-anon-usage_1710965204622/work
 annotated-types==0.7.0
 anyio==4.9.0
 archspec @ file:///croot/archspec_1709217642129/work
