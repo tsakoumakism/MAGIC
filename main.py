@@ -45,13 +45,13 @@ def generateOutput(user_input):
 
 agent2 = Agent(
     model=model,
-    result_type=ResponseModel,
+    output_type=ResponseModel,
     system_prompt=system_prompt_2
 )
 
 agent3 = Agent(
     model=model,
-    result_type=ResponseModel,
+    output_type=ResponseModel,
     system_prompt=system_prompt_3
 )
 
