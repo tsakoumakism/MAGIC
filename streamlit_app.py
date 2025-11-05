@@ -5,22 +5,48 @@ import random
 import string
 import yagmail
 import os
+import logging
 from datetime import datetime, timedelta
 from main import generateOutput
 
 TOKEN_FILE = ".auth_token"
 
-# --- READ FROM STREAMLIT SECRETS
+# # --- READ FROM STREAMLIT SECRETS
+# def get_connection():
+#     db = st.secrets["database"]
+#     email = st.secrets["email"]
+#     return psycopg2.connect(
+#         host=db["host"],
+#         dbname=db["dbname"],
+#         user=db["user"],
+#         password=db["password"],
+#         port=db["port"]
+#     )
+
+# Configure logging (this ensures messages go to Streamlit logs)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 def get_connection():
-    db = st.secrets["database"]
-    email = st.secrets["email"]
-    return psycopg2.connect(
-        host=db["host"],
-        dbname=db["dbname"],
-        user=db["user"],
-        password=db["password"],
-        port=db["port"]
-    )
+    """Attempt to connect to the PostgreSQL database with error handling."""
+    try:
+        logging.info("Attempting to connect to the database...")
+
+        # You can store your DB URL in Streamlit secrets:
+        conn = psycopg2.connect(st.secrets["database"]["url"])
+
+        logging.info("Database connection established successfully.")
+        return conn
+
+    except psycopg2.OperationalError as e:
+        logging.error("OperationalError while connecting to database:", exc_info=True)
+        st.error("❌ Could not connect to the database. Please check your connection settings.")
+        return None
+
+    except Exception as e:
+        logging.exception("Unexpected error during database connection.")
+        st.error(f"⚠️ Unexpected error: {e}")
+        return None
+
 
 # --- EMAIL SENDER ---
 def send_verification_email(recipient, code):
