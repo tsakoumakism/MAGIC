@@ -8,10 +8,8 @@ import os
 import logging
 from datetime import datetime, timedelta
 from main import generateOutput
-import requests
 
 TOKEN_FILE = ".auth_token"
-BASE_URL = "http://127.0.0.1:8000"
 
 # # --- READ FROM STREAMLIT SECRETS
 # def get_connection():
@@ -25,18 +23,6 @@ BASE_URL = "http://127.0.0.1:8000"
 #         port=db["port"]
 #     )
 
-def api_register(username, email, password):
-    resp = requests.post(f"{BASE_URL}/register", json={"username": username, "email": email, "password": password})
-    return resp.json(), resp.status_code
-
-def api_verify(username, code):
-    resp = requests.post(f"{BASE_URL}/verify", json={"username": username, "code": code})
-    return resp.json(), resp.status_code
-
-def api_login(username, password):
-    resp = requests.post(f"{BASE_URL}/login", json={"username": username, "password": password})
-    return resp.json(), resp.status_code
-
 # Configure logging (this ensures messages go to Streamlit logs)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -47,6 +33,7 @@ def get_connection():
     except Exception as e:
         st.error(f"Database connection failed: {e}")
         return None
+
 
 # --- EMAIL SENDER ---
 def send_verification_email(recipient, code):
@@ -60,93 +47,93 @@ def send_verification_email(recipient, code):
         st.error(f"Failed to send verification email: {e}")
 
 # --- VERIFY USER ---
-# def verify_user(username, password):
-#     try:
-#         conn = get_connection()
-#         cur = conn.cursor()
-#         cur.execute("SELECT password_hash, verified FROM users WHERE username = %s", (username,))
-#         result = cur.fetchone()
-#         cur.close()
-#         conn.close()
-#
-#         if result:
-#             stored_hash, verified = result
-#             if not verified:
-#                 st.warning("Please verify your email before logging in.")
-#                 return False
-#             return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
-#         return False
-#     except Exception as e:
-#         st.error(f"Database error: {e}")
-#         return False
+def verify_user(username, password):
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT password_hash, verified FROM users WHERE username = %s", (username,))
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if result:
+            stored_hash, verified = result
+            if not verified:
+                st.warning("Please verify your email before logging in.")
+                return False
+            return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+        return False
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return False
 
 # --- REGISTER USER ---
-# def register_user(username, email, password):
-#     try:
-#         conn = get_connection()
-#         cur = conn.cursor()
-#
-#         cur.execute("SELECT username, email FROM users WHERE username = %s OR email = %s", (username, email))
-#         if cur.fetchone():
-#             st.warning("Username or email already exists.")
-#             cur.close()
-#             conn.close()
-#             return False
-#
-#         hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-#         code = ''.join(random.choices(string.digits, k=6))
-#         expiry = datetime.utcnow() + timedelta(minutes=10)
-#
-#         cur.execute("""
-#             INSERT INTO users (username, email, password_hash, verified, verification_code, verification_expiry)
-#             VALUES (%s, %s, %s, %s, %s, %s)
-#         """, (username, email, hashed, False, code, expiry))
-#         conn.commit()
-#         cur.close()
-#         conn.close()
-#
-#         send_verification_email(email, code)
-#         st.session_state.pending_verification = username
-#         return True
-#     except Exception as e:
-#         st.error(f"Database error: {e}")
-#         return False
+def register_user(username, email, password):
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT username, email FROM users WHERE username = %s OR email = %s", (username, email))
+        if cur.fetchone():
+            st.warning("Username or email already exists.")
+            cur.close()
+            conn.close()
+            return False
+
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        code = ''.join(random.choices(string.digits, k=6))
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+
+        cur.execute("""
+            INSERT INTO users (username, email, password_hash, verified, verification_code, verification_expiry)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (username, email, hashed, False, code, expiry))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        send_verification_email(email, code)
+        st.session_state.pending_verification = username
+        return True
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return False
 
 # --- VERIFY EMAIL CODE ---
-# def verify_email_code(username, code):
-#     try:
-#         conn = get_connection()
-#         cur = conn.cursor()
-#         cur.execute("SELECT verification_code, verification_expiry FROM users WHERE username = %s", (username,))
-#         result = cur.fetchone()
-#
-#         if not result:
-#             return False
-#
-#         stored_code, expiry = result
-#         if datetime.utcnow() > expiry:
-#             st.error("Verification code has expired. Please register again.")
-#             cur.close()
-#             conn.close()
-#             return False
-#
-#         if stored_code == code:
-#             cur.execute("""
-#                 UPDATE users
-#                 SET verified = TRUE, verification_code = NULL, verification_expiry = NULL
-#                 WHERE username = %s
-#             """, (username,))
-#             conn.commit()
-#             cur.close()
-#             conn.close()
-#             return True
-#         else:
-#             cur.close()
-#             conn.close()
-#             return False
-#     except Exception as e:
-#         st.error(f"Database error: {e}")
-#         return False
+def verify_email_code(username, code):
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT verification_code, verification_expiry FROM users WHERE username = %s", (username,))
+        result = cur.fetchone()
+
+        if not result:
+            return False
+
+        stored_code, expiry = result
+        if datetime.utcnow() > expiry:
+            st.error("Verification code has expired. Please register again.")
+            cur.close()
+            conn.close()
+            return False
+
+        if stored_code == code:
+            cur.execute("""
+                UPDATE users
+                SET verified = TRUE, verification_code = NULL, verification_expiry = NULL
+                WHERE username = %s
+            """, (username,))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return True
+        else:
+            cur.close()
+            conn.close()
+            return False
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return False
 
 # --- REMEMBER ME HELPERS ---
 def save_remember_token(username):
@@ -220,7 +207,7 @@ if not st.session_state.logged_in:
             verify_button = st.form_submit_button("Verify")
 
         if verify_button:
-            if api_verify(st.session_state.pending_verification, code):
+            if verify_email_code(st.session_state.pending_verification, code):
                 st.success("Email verified! You can now log in.")
                 st.session_state.pending_verification = None
                 st.session_state.register_mode = False
@@ -243,7 +230,7 @@ if not st.session_state.logged_in:
             elif not username or not password or not email:
                 st.error("All fields are required.")
             else:
-                if api_register(username, email, password):
+                if register_user(username, email, password):
                     st.info("Check your email for the verification code.")
                     st.rerun()
 
@@ -260,7 +247,7 @@ if not st.session_state.logged_in:
             login_button = st.form_submit_button("Login")
 
         if login_button:
-            if api_verify(username, password):
+            if verify_user(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 if remember_me:

@@ -5,8 +5,6 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from paper_search import search_papers, read_pdfs
 
-
-
 # Set your OpenAI API key
 jim_api_key = "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"
 model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(api_key=jim_api_key))
