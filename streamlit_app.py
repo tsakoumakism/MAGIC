@@ -1,184 +1,10 @@
 import streamlit as st
-import psycopg2
-import bcrypt
-import random
-import string
-import yagmail
-import os
-import logging
-from datetime import datetime, timedelta
+import requests
 from main import generateOutput
 
-TOKEN_FILE = ".auth_token"
+BASE_URL = "https://airaapi.onrender.com"
 
-# # --- READ FROM STREAMLIT SECRETS
-# def get_connection():
-#     db = st.secrets["database"]
-#     email = st.secrets["email"]
-#     return psycopg2.connect(
-#         host=db["host"],
-#         dbname=db["dbname"],
-#         user=db["user"],
-#         password=db["password"],
-#         port=db["port"]
-#     )
-
-# Configure logging (this ensures messages go to Streamlit logs)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
-def get_connection():
-    try:
-        conn = psycopg2.connect(st.secrets["database"]["url"])
-        return conn
-    except Exception as e:
-        st.error(f"Database connection failed: {e}")
-        return None
-
-
-# --- EMAIL SENDER ---
-def send_verification_email(recipient, code):
-    try:
-        yag = yagmail.SMTP(st.secrets["email"]["user"], st.secrets["email"]["password"])
-        subject = "Your Verification Code"
-        contents = f"Welcome! Your verification code is: {code}\n\nIt expires in 10 minutes."
-        yag.send(recipient, subject, contents)
-        st.info(f"Verification code sent to {recipient}.")
-    except Exception as e:
-        st.error(f"Failed to send verification email: {e}")
-
-# --- VERIFY USER ---
-def verify_user(username, password):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT password_hash, verified FROM users WHERE username = %s", (username,))
-        result = cur.fetchone()
-        cur.close()
-        conn.close()
-
-        if result:
-            stored_hash, verified = result
-            if not verified:
-                st.warning("Please verify your email before logging in.")
-                return False
-            return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
-        return False
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return False
-
-# --- REGISTER USER ---
-def register_user(username, email, password):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("SELECT username, email FROM users WHERE username = %s OR email = %s", (username, email))
-        if cur.fetchone():
-            st.warning("Username or email already exists.")
-            cur.close()
-            conn.close()
-            return False
-
-        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-        code = ''.join(random.choices(string.digits, k=6))
-        expiry = datetime.utcnow() + timedelta(minutes=10)
-
-        cur.execute("""
-            INSERT INTO users (username, email, password_hash, verified, verification_code, verification_expiry)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (username, email, hashed, False, code, expiry))
-        conn.commit()
-        cur.close()
-        conn.close()
-
-        send_verification_email(email, code)
-        st.session_state.pending_verification = username
-        return True
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return False
-
-# --- VERIFY EMAIL CODE ---
-def verify_email_code(username, code):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT verification_code, verification_expiry FROM users WHERE username = %s", (username,))
-        result = cur.fetchone()
-
-        if not result:
-            return False
-
-        stored_code, expiry = result
-        if datetime.utcnow() > expiry:
-            st.error("Verification code has expired. Please register again.")
-            cur.close()
-            conn.close()
-            return False
-
-        if stored_code == code:
-            cur.execute("""
-                UPDATE users
-                SET verified = TRUE, verification_code = NULL, verification_expiry = NULL
-                WHERE username = %s
-            """, (username,))
-            conn.commit()
-            cur.close()
-            conn.close()
-            return True
-        else:
-            cur.close()
-            conn.close()
-            return False
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return False
-
-# --- REMEMBER ME HELPERS ---
-def save_remember_token(username):
-    token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET remember_token = %s WHERE username = %s", (token, username))
-        conn.commit()
-        cur.close()
-        conn.close()
-        with open(TOKEN_FILE, "w") as f:
-            f.write(token)
-    except Exception as e:
-        st.error(f"Error saving remember token: {e}")
-
-def get_user_from_token():
-    if not os.path.exists(TOKEN_FILE):
-        return None
-    try:
-        with open(TOKEN_FILE, "r") as f:
-            token = f.read().strip()
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT username FROM users WHERE remember_token = %s", (token,))
-        result = cur.fetchone()
-        cur.close()
-        conn.close()
-        return result[0] if result else None
-    except Exception:
-        return None
-
-def clear_remember_token(username=None):
-    if os.path.exists(TOKEN_FILE):
-        os.remove(TOKEN_FILE)
-    if username:
-        try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("UPDATE users SET remember_token = NULL WHERE username = %s", (username,))
-            conn.commit()
-            cur.close()
-            conn.close()
-        except Exception:
-            pass
+st.set_page_config(page_title="Research Copilot", layout="centered")
 
 # --- SESSION STATE ---
 if "logged_in" not in st.session_state:
@@ -190,12 +16,58 @@ if "pending_verification" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = None
 
-# --- AUTO LOGIN ---
-if not st.session_state.logged_in:
-    remembered_user = get_user_from_token()
-    if remembered_user:
-        st.session_state.logged_in = True
-        st.session_state.username = remembered_user
+# --- REGISTER ---
+def register_user(username, email, password):
+    try:
+        response = requests.post(f"{BASE_URL}/register", json={
+            "username": username,
+            "email": email,
+            "password": password
+        })
+        if response.status_code == 200:
+            st.session_state.pending_verification = username
+            return True
+        else:
+            st.error(response.json().get("detail", "Registration failed."))
+            return False
+    except Exception as e:
+        st.error(f"Error connecting to API: {e}")
+        return False
+
+# --- VERIFY EMAIL ---
+def verify_email_code(username, code):
+    try:
+        response = requests.post(f"{BASE_URL}/verify", json={
+            "username": username,
+            "code": code
+        })
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error connecting to API: {e}")
+        return False
+
+# --- LOGIN ---
+def verify_user(username, password):
+    try:
+        response = requests.post(f"{BASE_URL}/login", json={
+            "username": username,
+            "password": password
+        })
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error connecting to API: {e}")
+        return False
+
+# --- CHATBOT ---
+def get_chat_response(user_input):
+    try:
+        response = requests.post(f"{BASE_URL}/chat", json={"user_input": user_input})
+        if response.status_code == 200:
+            return response.json()["response"]
+        else:
+            return "Error: failed to get response from API."
+    except Exception as e:
+        return f"Error connecting to API: {e}"
 
 # --- AUTH FLOW ---
 if not st.session_state.logged_in:
@@ -214,6 +86,7 @@ if not st.session_state.logged_in:
                 st.rerun()
             else:
                 st.error("Invalid or expired verification code.")
+
     elif st.session_state.register_mode:
         st.title("🆕 Register")
 
@@ -237,21 +110,19 @@ if not st.session_state.logged_in:
         if st.button("Back to Login"):
             st.session_state.register_mode = False
             st.rerun()
+
     else:
         st.title("🔐 Login")
 
         with st.form("login_form"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
-            remember_me = st.checkbox("Remember me")
             login_button = st.form_submit_button("Login")
 
         if login_button:
             if verify_user(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                if remember_me:
-                    save_remember_token(username)
                 st.success("Login successful!")
                 st.rerun()
             else:
@@ -261,9 +132,9 @@ if not st.session_state.logged_in:
         if st.button("Register here"):
             st.session_state.register_mode = True
             st.rerun()
+
 # --- MAIN APP ---
 else:
-    st.set_page_config(page_title="Simple Chatbot", layout="centered")
     st.title(f"💬 Research Copilot — Welcome, {st.session_state.username}!")
 
     if "chat_history" not in st.session_state:
@@ -275,7 +146,7 @@ else:
 
     if submit_button and user_input:
         st.session_state.chat_history.append(("You", user_input))
-        bot_response = generateOutput(user_input)
+        bot_response = get_chat_response(user_input)
         st.session_state.chat_history.append(("Bot", bot_response))
 
     for sender, message in st.session_state.chat_history:
@@ -285,7 +156,6 @@ else:
             st.markdown(f"<div style='color: gray'><b>{sender}:</b> {message}</div>", unsafe_allow_html=True)
 
     if st.button("Logout"):
-        clear_remember_token(st.session_state.username)
         st.session_state.logged_in = False
         st.session_state.username = None
         st.rerun()
