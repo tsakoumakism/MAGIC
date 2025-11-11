@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
+import strings as STR
 from main import generateOutput
 
 BASE_URL = "https://airaapi.onrender.com"
 
-st.set_page_config(page_title="Research Copilot", layout="centered")
+st.set_page_config(page_title=STR.TITLE_CHAT, layout="centered")
 
 # --- SESSION STATE ---
 if "logged_in" not in st.session_state:
@@ -28,10 +29,10 @@ def register_user(username, email, password):
             st.session_state.pending_verification = username
             return True
         else:
-            st.error(response.json().get("detail", "Registration failed."))
+            st.error(response.json().get("detail", STR.REG_FAILED))
             return False
     except Exception as e:
-        st.error(f"Error connecting to API: {e}")
+        st.error(STR.API_CONNECTION_FAILED+f" {e}")
         return False
 
 # --- VERIFY EMAIL ---
@@ -43,7 +44,7 @@ def verify_email_code(username, code):
         })
         return response.status_code == 200
     except Exception as e:
-        st.error(f"Error connecting to API: {e}")
+        st.error(STR.API_CONNECTION_FAILED+f" {e}")
         return False
 
 # --- LOGIN ---
@@ -55,7 +56,7 @@ def verify_user(username, password):
         })
         return response.status_code == 200
     except Exception as e:
-        st.error(f"Error connecting to API: {e}")
+        st.error(STR.API_CONNECTION_FAILED+f" {e}")
         return False
 
 # --- CHATBOT ---
@@ -65,30 +66,30 @@ def get_chat_response(user_input):
         if response.status_code == 200:
             return response.json()["response"]
         else:
-            return "Error: failed to get response from API."
+            return STR.API_RESPONSE_FAILED
     except Exception as e:
-        return f"Error connecting to API: {e}"
+        return STR.API_CONNECTION_FAILED+f" {e}"
 
 # --- AUTH FLOW ---
 if not st.session_state.logged_in:
     if st.session_state.pending_verification:
-        st.title("📧 Verify Your Email")
+        st.title(STR.TITLE_VERIFY)
 
         with st.form("verify_form"):
-            code = st.text_input("Enter the 6-digit code sent to your email")
-            verify_button = st.form_submit_button("Verify")
+            code = st.text_input(STR.VERIFICATION_ENTER_CODE)
+            verify_button = st.form_submit_button(STR.BTN_VERIFY)
 
         if verify_button:
             if verify_email_code(st.session_state.pending_verification, code):
-                st.success("Email verified! You can now log in.")
+                st.success(STR.EMAIL_VERIFIED)
                 st.session_state.pending_verification = None
                 st.session_state.register_mode = False
                 st.rerun()
             else:
-                st.error("Invalid or expired verification code.")
+                st.error(STR.VERIFICATION_INVALID)
 
     elif st.session_state.register_mode:
-        st.title("🆕 Register")
+        st.title(STR.TITLE_REGISTER)
 
         with st.form("register_form"):
             username = st.text_input("Username")
@@ -99,43 +100,43 @@ if not st.session_state.logged_in:
 
         if register_button:
             if password != confirm:
-                st.error("Passwords do not match.")
+                st.error(STR.PASSWORD_MISMATCH)
             elif not username or not password or not email:
-                st.error("All fields are required.")
+                st.error(STR.FIELDS_REQUIRED)
             else:
                 if register_user(username, email, password):
-                    st.info("Check your email for the verification code.")
+                    st.info(STR.VERIFICATION_SENT)
                     st.rerun()
 
-        if st.button("Back to Login"):
+        if st.button(STR.BTN_BACK):
             st.session_state.register_mode = False
             st.rerun()
 
     else:
-        st.title("🔐 Login")
+        st.title(STR.TITLE_LOGIN)
 
-        with st.form("login_form"):
+        with st.form(STR.TITLE_LOGIN):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
-            login_button = st.form_submit_button("Login")
+            login_button = st.form_submit_button(STR.BTN_LOGIN)
 
         if login_button:
             if verify_user(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.success("Login successful!")
+                st.success(STR.LOGIN_SUCCESS)
                 st.rerun()
             else:
-                st.error("Invalid username or password.")
+                st.error(STR.LOGIN_FAILED)
 
-        st.info("Don't have an account?")
-        if st.button("Register here"):
+        st.info(STR.INFO_ACCOUNT)
+        if st.button(STR.BTN_REGISTER_HERE):
             st.session_state.register_mode = True
             st.rerun()
 
 # --- MAIN APP ---
 else:
-    st.title(f"💬 Research Copilot — Welcome, {st.session_state.username}!")
+    st.title(STR.TITLE_WELCOME+f", {st.session_state.username}!")
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -145,9 +146,9 @@ else:
         submit_button = st.form_submit_button(label="Send")
 
     if submit_button and user_input:
-        st.session_state.chat_history.append(("You", user_input))
+        st.session_state.chat_history.append((STR.CHAT_PLACEHOLDER, user_input))
         bot_response = get_chat_response(user_input)
-        st.session_state.chat_history.append(("Bot", bot_response))
+        st.session_state.chat_history.append((STR.BOT_PREFIX, bot_response))
 
     for sender, message in st.session_state.chat_history:
         if sender == "You":
@@ -155,7 +156,7 @@ else:
         else:
             st.markdown(f"<div style='color: gray'><b>{sender}:</b> {message}</div>", unsafe_allow_html=True)
 
-    if st.button("Logout"):
+    if st.button(STR.BTN_LOGOUT):
         st.session_state.logged_in = False
         st.session_state.username = None
         st.rerun()
