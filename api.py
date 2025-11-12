@@ -46,10 +46,15 @@ class VerifyRequest(BaseModel):
 # Email helper
 # -----------------------------
 def send_verification_email(recipient, code):
+    print("-----1")
     yag = yagmail.SMTP(EMAIL_USER, EMAIL_PASSWORD)
+    print("-----2")
     subject = "Your Verification Code"
+    print("-----3")
     contents = f"Your verification code is: {code}\nIt expires in 10 minutes."
+    print("-----4")
     yag.send(recipient, subject, contents)
+    print("-----5")
 
 # -----------------------------
 # Endpoints
@@ -74,15 +79,12 @@ def register_user(req: RegisterRequest):
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (req.username, req.email, hashed, False, code, expiry))
 
-    print("error 1 -----")
+
     conn.commit()
-    print("error 2 -----")
     cur.close()
-    print("error 3 -----")
     conn.close()
-    print("error 4 -----")
     send_verification_email(req.email, code)
-    print("error 5 -----")
+
     return {"message": "User registered. Verification email sent."}
 
 
