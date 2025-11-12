@@ -74,11 +74,15 @@ def register_user(req: RegisterRequest):
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (req.username, req.email, hashed, False, code, expiry))
 
+    print("error 1 -----")
     conn.commit()
+    print("error 2 -----")
     cur.close()
+    print("error 3 -----")
     conn.close()
-
+    print("error 4 -----")
     send_verification_email(req.email, code)
+    print("error 5 -----")
     return {"message": "User registered. Verification email sent."}
 
 
